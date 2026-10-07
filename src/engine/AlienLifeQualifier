@@ -1,0 +1,99 @@
+"""
+    AlienLifeQualifier
+
+Polynomial constraint evaluation engine.
+
+If `require_all` is true, every constraint must pass.
+
+If `require_all` is false, at least one constraint
+must pass.
+"""
+struct AlienLifeQualifier
+    constraints::Vector{PolynomialConstraint}
+    require_all::Bool
+end
+
+
+function AlienLifeQualifier(
+    constraints::Vector{PolynomialConstraint};
+    require_all::Bool = true
+)
+
+    return AlienLifeQualifier(
+        constraints,
+        require_all
+    )
+end
+
+
+"""
+    qualify(engine, candidate)
+
+Evaluate a candidate against every polynomial constraint.
+"""
+function qualify(
+    engine::AlienLifeQualifier,
+    candidate::AlienCandidate
+)
+
+    passed = String[]
+    failed = String[]
+    values = Dict{String,Float64}()
+
+    for constraint in engine.constraints
+
+        value = try
+            Float64(constraint.function_(candidate.parameters))
+        catch e
+            if e isa KeyError
+                push!(
+                    failed,
+                    "$(constraint.name) (missing parameter: $(e.key))"
+                )
+
+                continue
+            else
+                rethrow()
+            end
+        end
+
+        values[constraint.name] = value
+
+        if abs(value) <= constraint.tolerance
+            push!(passed, constraint.name)
+        else
+            push!(failed, constraint.name)
+        end
+    end
+
+    qualified = if engine.require_all
+        isempty(failed)
+    else
+        !isempty(passed)
+    end
+
+    return QualificationResult(
+        candidate.name,
+        qualified,
+        passed,
+        failed,
+        values
+    )
+end
+
+
+"""
+    qualify_many(engine, candidates)
+
+Qualify multiple candidates.
+"""
+function qualify_many(
+    engine::AlienLifeQualifier,
+    candidates::Vector{<:AlienCandidate}
+)
+
+    return [
+        qualify(engine, candidate)
+        for candidate in candidates
+    ]
+end
